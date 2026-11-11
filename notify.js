@@ -4,12 +4,13 @@ const path = require('path');
 const dataPath = path.join(__dirname, 'data.json');
 const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
-// Tự động làm sạch mã Token (loại bỏ khoảng trắng thừa nếu có)
 const rawToken = (process.env.ZALO_BOT_TOKEN || '').trim();
 const BOT_TOKEN = rawToken.startsWith('bot') ? rawToken.slice(3) : rawToken;
+let CHAT_ID = (process.env.ZALO_CHAT_ID || '').trim();
 
-// Ưu tiên lấy Chat ID từ GitHub Secrets, nếu không có thì lấy từ file data.json
-let CHAT_ID = (process.env.ZALO_CHAT_ID || data.chatId || '').trim();
+if (!CHAT_ID && data.chatKey) {
+  CHAT_ID = Buffer.from(data.chatKey, 'base64').toString('utf8');
+}
 
 function getVNDate() {
   const now = new Date();
@@ -24,13 +25,50 @@ function formatDateVN(date) {
   return `${d}/${m}/${y}`;
 }
 
+function parseVNDate(str) {
+  const [d, m, y] = str.split('/').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function getDayNameVN(dayIndex) {
   return ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'][dayIndex];
 }
 
-// Hàm tự động lấy Chat ID bằng phương thức POST nếu bạn chưa nhập Chat ID
+function isWorkDay(d, holidays) {
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false;
+  return !(holidays || []).includes(formatDateVN(d));
+}
+
+function diffWorkDays(d1, d2, holidays) {
+  let start = new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  let end = new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  let count = 0;
+  let cur = new Date(start);
+  if (end >= start) {
+    while (cur < end) {
+      if (isWorkDay(cur, holidays)) count++;
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else {
+    while (cur > end) {
+      cur.setDate(cur.getDate() - 1);
+      if (isWorkDay(cur, holidays)) count--;
+    }
+  }
+  return count;
+}
+
+function getBasePersonForDate(targetDate, anchorDateStr, anchorIndex) {
+  const total = data.members.length;
+  const anchorDate = parseVNDate(anchorDateStr);
+  const offset = diffWorkDays(anchorDate, targetDate, data.holidays);
+  let idx = (anchorIndex + offset) % total;
+  if (idx < 0) idx += total;
+  return data.members[idx];
+}
+
 async function autoFetchChatId() {
-  console.log("Đang tự động dò tìm Chat ID từ Zalo Bot (Hãy nhắn 1 tin bất kỳ cho Bot trên Zalo ngay lúc này)...");
   try {
     const url = `https://bot-api.zapps.me/bot${BOT_TOKEN}/getUpdates`;
     const res = await fetch(url, {
@@ -39,69 +77,140 @@ async function autoFetchChatId() {
       body: JSON.stringify({})
     });
     const json = await res.json();
-    console.log("Dữ liệu getUpdates trả về:", JSON.stringify(json));
-
+    console.log("Phản hồi getUpdates:", JSON.stringify(json));
     if (json && json.ok && json.result) {
-      // Xử lý cả trường hợp Zalo trả về 1 đối tượng hoặc 1 danh sách
       const item = Array.isArray(json.result) ? json.result[json.result.length - 1] : json.result;
       const foundId = item?.message?.chat?.id;
-      if (foundId) {
-        console.log("✅ Đã tìm thấy Chat ID tự động:", foundId);
-        return String(foundId);
-      }
+      if (foundId) return String(foundId);
     }
   } catch (err) {
-    console.error("Lỗi khi tự động dò Chat ID:", err);
+    console.error("Lỗi dò Chat ID:", err);
   }
   return '';
 }
 
+// Tạo hoặc đọc bộ nhớ đám mây để đồng bộ việc đổi ca từ Web App
+async function syncCloudState() {
+  let cloudState = {
+    anchorDate: data.anchorDate || "12/11/2026",
+    anchorIndex: data.anchorIndex || 0,
+    swaps: {}
+  };
+
+  if (data.syncUrl) {
+    try {
+      const res = await fetch(data.syncUrl);
+      if (res.ok) {
+        const remote = await res.json();
+        cloudState = { ...cloudState, ...remote };
+        return cloudState;
+      }
+    } catch (e) {
+      console.error("Không đọc được syncUrl:", e);
+    }
+  }
+
+  // Nếu chưa có syncUrl thì tự động khởi tạo 1 kho lưu trữ đám mây miễn phí
+  try {
+    const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(cloudState)
+    });
+    const loc = res.headers.get('location') || res.headers.get('Location');
+    if (loc) {
+      data.syncUrl = loc.startsWith('http') ? loc.replace('http:', 'https:') : `https://jsonblob.com${loc}`;
+      console.log("✅ Đã tạo kho đồng bộ đám mây:", data.syncUrl);
+    }
+  } catch (e) {
+    console.error("Lỗi tạo kho đồng bộ:", e);
+  }
+  return cloudState;
+}
+
 async function run() {
   if (!BOT_TOKEN) {
-    console.error("❌ LỖI: Bạn chưa nhập ZALO_BOT_TOKEN trong mục Settings -> Secrets -> Actions của GitHub!");
+    console.error("❌ LỖI: Chưa tìm thấy ZALO_BOT_TOKEN. Hãy kiểm tra mục Secrets trên GitHub!");
     return;
   }
 
-  // Nếu chưa có CHAT_ID, phần mềm tự động gọi lệnh POST getUpdates để lấy
   if (!CHAT_ID) {
     CHAT_ID = await autoFetchChatId();
-    if (CHAT_ID) {
-      data.chatId = CHAT_ID; // Lưu lại vào data.json để các ngày sau dùng luôn
-    } else {
-      console.error("⚠️ Chưa lấy được Chat ID. Bạn hãy bấm Run workflow rồi nhắn ngay chữ 'alo' cho Bot trên Zalo!");
+    if (!CHAT_ID) {
+      console.error("⚠️ Chưa lấy được Chat ID. Bạn hãy mở Zalo nhắn chữ 'alo' cho con Bot rồi bấm Run workflow lại ngay!");
       return;
     }
   }
 
+  // Lưu mã kết nối đã mã hóa vào data.json để Web App có thể gọi Bot tự động
+  data.botKey = Buffer.from(BOT_TOKEN, 'utf8').toString('base64');
+  data.chatKey = Buffer.from(CHAT_ID, 'utf8').toString('base64');
+
+  const cloudState = await syncCloudState();
+  data.anchorDate = cloudState.anchorDate;
+  data.anchorIndex = cloudState.anchorIndex;
+
+  // Lưu lại data.json
+  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+
   const today = getVNDate();
-  const dayOfWeek = today.getDay();
-  const todayStr = formatDateVN(today);
+  const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dayOfWeek = todayZero.getDay();
+  const todayStr = formatDateVN(todayZero);
 
-  // 1. Kiểm tra Thứ Bảy, Chủ Nhật
   if (dayOfWeek === 0 || dayOfWeek === 6) {
-    console.log(`Hôm nay là cuối tuần (${todayStr}), không phân công trực.`);
+    console.log(`Hôm nay là cuối tuần (${todayStr}), không gửi thông báo trực.`);
     return;
   }
 
-  // 2. Kiểm tra ngày nghỉ lễ
   if (data.holidays && data.holidays.includes(todayStr)) {
-    console.log(`Hôm nay là ngày lễ (${todayStr}), bảo lưu lượt trực sang ngày đi làm kế tiếp.`);
+    console.log(`Hôm nay là ngày lễ (${todayStr}), nghỉ trực.`);
     return;
   }
 
-  // 3. Tính người trực hôm nay và ngày kế tiếp
-  const total = data.members.length;
-  const currentIdx = data.currentIndex % total;
-  const nextIdx = (currentIdx + 1) % total;
+  // Tính người trực hôm nay (có kiểm tra lịch đổi ca / trực bù trên Web App)
+  let todayPerson = getBasePersonForDate(todayZero, cloudState.anchorDate, cloudState.anchorIndex);
+  let noteText = "";
 
-  const todayPerson = data.members[currentIdx];
-  const nextPerson = data.members[nextIdx];
+  const swaps = cloudState.swaps || {};
+  if (swaps[todayStr]) {
+    todayPerson = swaps[todayStr].replacementPerson;
+    noteText = `ℹ️ (Trực thay cho Đ/c ${swaps[todayStr].busyPerson} đi công tác)\n`;
+  } else {
+    // Kiểm tra xem hôm nay có phải là ngày trực bù của ai không
+    for (const [swapDate, info] of Object.entries(swaps)) {
+      if (info.makeUpDateStr === todayStr) {
+        todayPerson = info.busyPerson;
+        noteText = `ℹ️ (Trực bù cho Đ/c ${info.replacementPerson} đã trực thay ngày ${swapDate})\n`;
+        break;
+      }
+    }
+  }
 
-  // 4. Soạn nội dung tin nhắn
+  // Tìm người trực ngày làm việc kế tiếp
+  let nextDate = new Date(todayZero);
+  nextDate.setDate(nextDate.getDate() + 1);
+  while (!isWorkDay(nextDate, data.holidays)) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+  const nextDateStr = formatDateVN(nextDate);
+  let nextPerson = getBasePersonForDate(nextDate, cloudState.anchorDate, cloudState.anchorIndex);
+  if (swaps[nextDateStr]) {
+    nextPerson = swaps[nextDateStr].replacementPerson;
+  } else {
+    for (const [, info] of Object.entries(swaps)) {
+      if (info.makeUpDateStr === nextDateStr) {
+        nextPerson = info.busyPerson;
+        break;
+      }
+    }
+  }
+
   let message = `🔔 [THÔNG BÁO TRỰC NHẬT - ${data.roomName.toUpperCase()}]\n`
               + `📅 Ngày: ${getDayNameVN(dayOfWeek)}, ${todayStr}\n`
               + `----------------------------------\n`
               + `👤 Cán bộ trực hôm nay: Đ/c ${todayPerson}\n`
+              + noteText
               + `📋 Nội dung công việc:\n`;
 
   data.tasks.forEach((task, i) => {
@@ -109,11 +218,10 @@ async function run() {
   });
 
   message += `----------------------------------\n`
-           + `⏭️ Trực ngày làm việc kế tiếp: Đ/c ${nextPerson}\n`
-           + `🌐 Bảng theo dõi lịch trực: ${data.webAppUrl}\n`
-           + `💡 Chúc cả phòng một ngày làm việc hiệu quả!`;
+           + `⏭️ Dự kiến ngày làm việc kế tiếp (${getDayNameVN(nextDate.getDay())}): Đ/c ${nextPerson}\n`
+           + `🔄 Nếu bận công tác, bấm vào phần mềm dưới đây để chọn người trực thay:\n`
+           + `👉 ${data.webAppUrl}`;
 
-  // 5. Gửi tin nhắn qua Zalo Bot API bằng phương thức POST
   try {
     const sendUrl = `https://bot-api.zapps.me/bot${BOT_TOKEN}/sendMessage`;
     const res = await fetch(sendUrl, {
@@ -124,17 +232,10 @@ async function run() {
         text: message
       })
     });
-    const resultText = await res.text();
-    console.log("Kết quả gửi tin nhắn Zalo:", resultText);
+    console.log("✅ Kết quả gửi Zalo:", await res.text());
   } catch (err) {
-    console.error("Lỗi khi gửi tin nhắn Zalo:", err);
+    console.error("Lỗi gửi Zalo:", err);
   }
-
-  // 6. Cập nhật lượt trực mới và lưu vào data.json
-  data.currentIndex = nextIdx;
-  data.lastRunDate = todayStr;
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
-  console.log(`✅ Đã chuyển chỉ số trực ngày mai sang: ${nextIdx} (${nextPerson})`);
 }
 
 run();
