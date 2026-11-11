@@ -1,0 +1,35 @@
+name: Tự động nhắc trực nhật Zalo
+
+on:
+  schedule:
+    # Chạy lúc 23:45 UTC (tức 06:45 sáng giờ Việt Nam) từ Thứ Hai đến Thứ Sáu
+    - cron: '45 23 * * 0-4'
+  workflow_dispatch: # Cho phép bấm nút chạy thử bằng tay bất kỳ lúc nào
+
+permissions:
+  contents: write
+
+jobs:
+  send-zalo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tải dữ liệu
+        uses: actions/checkout@v4
+
+      - name: Cài đặt môi trường chạy
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Tính lịch và Gửi tin nhắn vào nhóm Zalo
+        env:
+          ZALO_BOT_TOKEN: ${{ secrets.ZALO_BOT_TOKEN }}
+          ZALO_CHAT_ID: ${{ secrets.ZALO_CHAT_ID }}
+        run: node notify.js
+
+      - name: Lưu lượt trực mới cho ngày mai
+        run: |
+          git config --global user.name "Auto Duty Bot"
+          git config --global user.email "actions@github.com"
+          git add data.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Chuyển ca trực sang ngày kế tiếp" && git push)
