@@ -2,7 +2,7 @@
   "roomName": "Phòng Xây dựng và Tài nguyên Môi trường",
   "webAppUrl": "https://canhnamgtvt-maker.github.io/truc-nhat/",
   "currentIndex": 0,
-  "lastRunDate": "11/11/2026",
+  "lastRunDate": "",
   "members": [
     "Nguyễn Vy Đồng",
     "Nguyễn Ngọc Quyết",
@@ -12,6 +12,7 @@
     "Tống Văn Phong",
     "Nguyễn Cảnh Nam"
   ],
+  "congTac": [],
   "holidays": [
     "01/01/2027",
     "30/04/2027",
@@ -20,6 +21,6 @@
   ],
   "tasks": [
     "Mở cửa thông thoáng phòng, chuẩn bị nước/trà đầu giờ.",
-    "Quét dọn, rửa cốc chén và thu gom, đổ rác cuối ngày.",
+    "Quét dọn, rửa cốc chén và thu gom, đổ rác cuối ngày."
   ]
 }
