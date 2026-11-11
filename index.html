@@ -3,67 +3,166 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Lịch Trực Nhật Phòng</title>
+  <title>Trực Nhật - Phòng XD & TNMT</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f0f4f8; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f0f4f8; -webkit-tap-highlight-color: transparent; }
     .zalo-bg { background: linear-gradient(135deg, #0068ff 0%, #0052cc 100%); }
+    .card-shadow { box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06); }
   </style>
 </head>
-<body class="pb-10">
+<body class="pb-12">
 
+  <!-- HEADER -->
   <header class="zalo-bg text-white pt-6 pb-12 px-4 rounded-b-3xl shadow-md">
-    <div class="max-w-md mx-auto flex justify-between items-center">
+    <div class="max-w-md mx-auto flex justify-between items-start">
       <div>
-        <span class="text-xs uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full font-medium">Lịch nội bộ</span>
-        <h1 class="text-xl font-bold mt-2" id="roomTitle">Đang tải dữ liệu...</h1>
-        <p class="text-blue-100 text-xs mt-0.5" id="todayDateStr"></p>
+        <span class="text-[11px] uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full font-semibold">Hệ thống trực nhật tự động</span>
+        <h1 class="text-lg font-bold mt-2 leading-snug" id="roomTitle">Phòng Xây dựng và Tài nguyên Môi trường</h1>
+        <p class="text-blue-100 text-xs mt-1" id="todayDateStr"></p>
       </div>
-      <div class="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center">
-        <i class="fa-solid fa-calendar-check text-xl"></i>
-      </div>
+      <button onclick="openResetModal()" title="Cài đặt người trực đầu tiên" class="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center active:scale-95 transition shrink-0 ml-2">
+        <i class="fa-solid fa-gear text-base"></i>
+      </button>
     </div>
   </header>
 
+  <!-- MAIN -->
   <main class="max-w-md mx-auto px-4 -mt-7 space-y-4">
-    <!-- Ca trực hôm nay -->
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-blue-50">
+
+    <!-- THẺ TRỰC HÔM NAY -->
+    <div class="bg-white rounded-2xl p-5 card-shadow border border-blue-50">
       <div class="flex items-center justify-between border-b border-gray-100 pb-3">
-        <span class="text-xs font-bold uppercase tracking-wider text-gray-500">Cán bộ trực hôm nay</span>
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+          <span class="text-xs font-bold uppercase tracking-wider text-gray-500">Cán bộ trực hôm nay</span>
+        </div>
         <span id="statusBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-green-100 text-green-700">Đang trực</span>
       </div>
 
-      <div class="py-5 text-center">
-        <div class="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-2.5 text-2xl font-bold" id="avatarInitial">-</div>
-        <h2 class="text-2xl font-extrabold text-gray-800" id="todayPerson">...</h2>
-        <p class="text-xs text-gray-500 mt-1.5" id="nextPerson">...</p>
+      <div class="py-4 text-center">
+        <div class="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-2 text-2xl font-bold shadow-inner" id="avatarInitial">-</div>
+        <h2 class="text-2xl font-extrabold text-gray-800" id="todayPerson">Đang tải...</h2>
+        <div id="swapNoticeBanner" class="hidden mt-2 inline-block bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-1.5 rounded-lg font-medium"></div>
+        <p class="text-xs text-gray-500 mt-2" id="nextPerson">...</p>
       </div>
 
+      <!-- NHIỆM VỤ -->
       <div class="bg-slate-50 rounded-xl p-3.5 mb-4 text-xs text-gray-600 space-y-1.5 border border-slate-100" id="taskList"></div>
 
-      <button onclick="copyZaloText()" class="w-full zalo-bg text-white font-semibold py-3 px-4 rounded-xl shadow active:scale-95 transition flex items-center justify-center space-x-2">
-        <i class="fa-regular fa-copy"></i>
-        <span>Sao chép tin nhắn & Mở Zalo</span>
-      </button>
+      <!-- NÚT BÁO BẬN DÀNH CHO NGƯỜI TRỰC -->
+      <div class="space-y-2.5">
+        <button onclick="openSwapModal()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3.5 px-4 rounded-xl shadow active:scale-95 transition flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-rotate"></i>
+          <span>Tôi bận hôm nay — Chọn người trực thay</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Lịch 10 ngày tới -->
-    <div class="bg-white rounded-2xl p-5 shadow-sm">
+    <!-- BẢNG LỊCH TUẦN NÀY -->
+    <div class="bg-white rounded-2xl p-5 card-shadow">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-gray-800 text-sm flex items-center">
+          <i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>
+          Lịch trực trong tuần (Thứ 2 - Thứ 6)
+        </h3>
+        <span id="clearSwapBtn" onclick="cancelTodaySwap()" class="hidden text-xs text-red-500 font-semibold cursor-pointer hover:underline">Khôi phục lịch gốc</span>
+      </div>
+      <div class="divide-y divide-gray-100 text-sm" id="weekScheduleList"></div>
+    </div>
+
+    <!-- LỊCH CÁC NGÀY TIẾP THEO -->
+    <div class="bg-white rounded-2xl p-5 card-shadow">
       <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center">
         <i class="fa-solid fa-list-ol text-blue-600 mr-2"></i>
-        Lịch phân công 10 ngày làm việc tới
+        Lịch xoay vòng các ngày kế tiếp
       </h3>
-      <div class="divide-y divide-gray-100 text-sm" id="scheduleList"></div>
+      <div class="divide-y divide-gray-100 text-sm" id="upcomingScheduleList"></div>
     </div>
+
   </main>
+
+  <!-- MODAL CHỌN NGƯỜI TRỰC THAY & BÁO BOT TỰ ĐỘNG -->
+  <div id="swapModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3 mb-3">
+        <div>
+          <h3 class="font-bold text-gray-800 text-base">Đổi người trực & Báo Bot Zalo</h3>
+          <p class="text-xs text-gray-500 mt-0.5">Khi bạn chọn, <b>Bot sẽ tự động nhắn lại thông báo</b> lên Zalo</p>
+        </div>
+        <button onclick="closeModal('swapModal')" class="text-gray-400 hover:text-gray-600 text-2xl px-2">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-sm">
+        <div class="bg-red-50 border border-red-100 rounded-xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold uppercase text-red-500 block">Người báo bận hôm nay:</span>
+            <span class="font-bold text-gray-800 text-base" id="busyPersonName">...</span>
+          </div>
+          <span class="text-xs bg-white text-red-600 font-semibold px-2.5 py-1 rounded-lg border border-red-200">Sẽ trực bù sau</span>
+        </div>
+
+        <div>
+          <span class="text-xs font-bold uppercase text-gray-400 block mb-1.5">
+            <i class="fa-solid fa-ban mr-1"></i>Đã trực trong tuần này (Không chọn lại):
+          </span>
+          <div id="alreadyDoneList" class="flex flex-wrap gap-1.5 text-xs"></div>
+        </div>
+
+        <div class="pt-1">
+          <button onclick="autoSelectAndNotify()" id="btnAutoPick" class="w-full zalo-bg text-white font-bold py-3.5 px-4 rounded-xl shadow active:scale-95 transition flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-bolt"></i>
+            <span>Tự động chọn người kế tiếp & Báo Bot ngay</span>
+          </button>
+        </div>
+
+        <div>
+          <span class="text-xs font-bold uppercase text-gray-600 block mb-2">
+            Hoặc bấm chọn cụ thể 1 người chưa trực trong tuần:
+          </span>
+          <div id="eligibleList" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ĐẶT NGƯỜI TRỰC ĐẦU TIÊN -->
+  <div id="resetModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3 mb-3">
+        <div>
+          <h3 class="font-bold text-gray-800 text-base">Chọn lại người trực gốc hôm nay</h3>
+          <p class="text-xs text-gray-500">Dành cho Trưởng phòng điều chỉnh lại vòng quay</p>
+        </div>
+        <button onclick="closeModal('resetModal')" class="text-gray-400 hover:text-gray-600 text-2xl px-2">&times;</button>
+      </div>
+      <div id="setFirstPersonList" class="space-y-2 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- MÀN HÌNH CHỜ GỬI BOT -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-black/70 z-50 hidden flex flex-col items-center justify-center text-white p-6 text-center">
+    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3 text-blue-400"></i>
+    <p class="font-bold text-base" id="loadingText">Đang ghi nhận đổi ca và gửi lệnh cho Bot Zalo...</p>
+  </div>
 
   <script>
     let appData = null;
-    let generatedMsg = "";
+    let cloudState = {
+      anchorDate: "12/11/2026",
+      anchorIndex: 0,
+      swaps: {}
+    };
+    let currentWeekPlan = [];
 
     function formatDateVN(d) {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    }
+
+    function parseVNDate(str) {
+      const [d, m, y] = str.split("/").map(Number);
+      return new Date(y, m - 1, d);
     }
 
     function getDayName(d) {
@@ -73,84 +172,26 @@
     function isWorkDay(d, holidays) {
       const day = d.getDay();
       if (day === 0 || day === 6) return false;
-      return !holidays.includes(formatDateVN(d));
+      return !(holidays || []).includes(formatDateVN(d));
     }
 
-    async function loadSchedule() {
-      try {
-        const res = await fetch('./data.json?t=' + new Date().getTime());
-        appData = await res.json();
-      } catch (e) {
-        alert("Không tải được file data.json!");
-        return;
-      }
-
-      const today = new Date();
-      document.getElementById("roomTitle").innerText = `Lịch Trực - ${appData.roomName}`;
-      document.getElementById("todayDateStr").innerText = `${getDayName(today)}, ${formatDateVN(today)}`;
-
-      // Render công việc
-      const taskEl = document.getElementById("taskList");
-      taskEl.innerHTML = `<div class="font-bold text-gray-700 mb-1">Nhiệm vụ trực nhật:</div>` +
-        appData.tasks.map(t => `<div>• ${t}</div>`).join("");
-
-      // Tính 10 ngày làm việc tiếp theo dựa trên currentIndex trong data.json
-      let list = [];
-      let curDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      let idx = appData.currentIndex % appData.members.length;
-
-      // Nếu hôm nay GitHub Action đã chạy và cộng index lên 1 rồi, thì người trực hôm nay là (idx - 1)
-      const todayStr = formatDateVN(today);
-      if (appData.lastRunDate === todayStr) {
-        idx = (idx - 1 + appData.members.length) % appData.members.length;
-      }
-
-      while (list.length < 10) {
-        if (isWorkDay(curDate, appData.holidays)) {
-          list.push({
-            dateStr: formatDateVN(curDate),
-            dayName: getDayName(curDate),
-            person: appData.members[idx]
-          });
-          idx = (idx + 1) % appData.members.length;
+    function diffWorkDays(d1, d2, holidays) {
+      let start = new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+      let end = new Date(d2.getFullYear(), d2.getMonth(), d2.getDate());
+      let count = 0;
+      let cur = new Date(start);
+      if (end >= start) {
+        while (cur < end) {
+          if (isWorkDay(cur, holidays)) count++;
+          cur.setDate(cur.getDate() + 1);
         }
-        curDate.setDate(curDate.getDate() + 1);
+      } else {
+        while (cur > end) {
+          cur.setDate(cur.getDate() - 1);
+          if (isWorkDay(cur, holidays)) count--;
+        }
       }
-
-      const current = list[0];
-      const next = list[1];
-
-      document.getElementById("todayPerson").innerText = `Đ/c ${current.person}`;
-      const nameParts = current.person.trim().split(" ");
-      document.getElementById("avatarInitial").innerText = nameParts[nameParts.length - 1][0].toUpperCase();
-      document.getElementById("nextPerson").innerText = `Dự kiến tiếp theo (${next.dayName}, ${next.dateStr}): Đ/c ${next.person}`;
-
-      const schedEl = document.getElementById("scheduleList");
-      schedEl.innerHTML = list.map((item, i) => `
-        <div class="py-2.5 flex justify-between items-center ${i === 0 ? 'bg-blue-50/70 -mx-3 px-3 rounded-lg font-bold text-blue-700' : 'text-gray-700'}">
-          <div>
-            <span>${item.dayName}</span>
-            <span class="text-xs text-gray-400 ml-1">(${item.dateStr})</span>
-          </div>
-          <div>Đ/c ${item.person}</div>
-        </div>
-      `).join("");
-
-      generatedMsg = `🔔 [THÔNG BÁO TRỰC NHẬT - ${appData.roomName.toUpperCase()}]\n`
-        + `📅 Ngày: ${current.dayName}, ${current.dateStr}\n`
-        + `👤 Cán bộ trực: Đ/c ${current.person}\n`
-        + `⏭️ Trực kế tiếp (${next.dayName}): Đ/c ${next.person}\n`
-        + `🌐 Xem lịch cả phòng: ${window.location.href}`;
+      return count;
     }
 
-    function copyZaloText() {
-      navigator.clipboard.writeText(generatedMsg).then(() => {
-        alert("Đã sao chép tin nhắn! Đang chuyển sang Zalo...");
-        window.location.href = "zalo://";
-      });
-    }
-
-    window.onload = loadSchedule;
-  </script>
-</body>
-</html>
+    function getBase
