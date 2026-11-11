@@ -1,8 +1,11 @@
 {
   "roomName": "Phòng Xây dựng và Tài nguyên Môi trường",
   "webAppUrl": "https://canhnamgtvt-maker.github.io/truc-nhat/",
-  "currentIndex": 0,
-  "lastRunDate": "",
+  "anchorDate": "12/11/2026",
+  "anchorIndex": 0,
+  "syncUrl": "",
+  "botKey": "",
+  "chatKey": "",
   "members": [
     "Nguyễn Vy Đồng",
     "Nguyễn Ngọc Quyết",
@@ -12,7 +15,6 @@
     "Tống Văn Phong",
     "Nguyễn Cảnh Nam"
   ],
-  "congTac": [],
   "holidays": [
     "01/01/2027",
     "30/04/2027",
