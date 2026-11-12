@@ -9,6 +9,7 @@ const BOT_TOKEN = rawToken.startsWith('bot') ? rawToken.slice(3) : rawToken;
 const GH_TOKEN = (process.env.GH_TOKEN || '').trim();
 const GITHUB_REPO = (process.env.GITHUB_REPO || 'canhnamgtvt-maker/truc-nhat').trim();
 
+const SCHEDULE_CRON = (process.env.SCHEDULE_CRON || '').trim();
 const ACTION_MODE = (process.env.ACTION_MODE || 'normal').trim();
 const BUSY_PERSON = (process.env.BUSY_PERSON || '').trim();
 const REPLACEMENT_PERSON = (process.env.REPLACEMENT_PERSON || '').trim();
@@ -193,6 +194,7 @@ async function run() {
   }
 
   const today = getVNDate();
+  const currentHour = today.getHours();
   const dayOfMonth = today.getDate();
   const monthOfYear = today.getMonth() + 1;
   const dayOfWeek = today.getDay();
@@ -200,26 +202,32 @@ async function run() {
   const currentMonthKey = `${monthOfYear}/${today.getFullYear()}`;
   const total = data.members.length;
 
-  let isDataChanged = false;
+  // Nhận diện khung giờ 9h00 sáng ngày 05 hàng tháng (tách biệt với khung 6h45 sáng)
+  const isPartyFeeSchedule = (SCHEDULE_CRON === '0 2 5 * *') || (dayOfMonth === 5 && currentHour >= 8);
 
   // =========================================================================
-  // PHẦN A: NHẮC ĐỊNH KỲ NGÀY 05 HÀNG THÁNG (CHỈ GỬI NỘI DUNG NGẮN GỌN)
+  // LUỒNG 1: KHUNG GIỜ RIÊNG NHẮC NỘP ĐẢNG PHÍ (09h00 SÁNG NGÀY 05 HÀNG THÁNG)
   // =========================================================================
-  if ((ACTION_MODE === 'normal' && dayOfMonth === 5 && data.lastPartyFeeMonth !== currentMonthKey) || ACTION_MODE === 'test_party_fee') {
+  if ((ACTION_MODE === 'normal' && isPartyFeeSchedule) || ACTION_MODE === 'test_party_fee') {
+    if (ACTION_MODE === 'normal' && data.lastPartyFeeMonth === currentMonthKey) {
+      console.log(`⛔ Tháng ${currentMonthKey} đã nhắc nộp Đảng phí rồi. Bỏ qua!`);
+      return;
+    }
+
     const partyFeeMsg = "Nộp tiền Đảng phí chưa, hoàn thành ngay nhé";
     await sendZaloMessage(partyFeeMsg);
-    console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí định kỳ!");
+    console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí lúc 9h sáng!");
 
     if (ACTION_MODE === 'normal') {
       data.lastPartyFeeMonth = currentMonthKey;
-      isDataChanged = true;
-    } else if (ACTION_MODE === 'test_party_fee') {
-      return;
+      data.updatedAt = Date.now();
+      fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
     }
+    return; // Dừng ngay sau khi nhắn Đảng phí, không chạy xuống phần trực nhật
   }
 
   // =========================================================================
-  // PHẦN B: XỬ LÝ PHÂN CÔNG TRỰC NHẬT (CÓ KHÓA CHỐNG GỬI TRÙNG TRONG NGÀY)
+  // LUỒNG 2: PHÂN CÔNG TRỰC NHẬT (06h45 SÁNG HÀNG NGÀY HOẶC KHI BẤM ĐỔI CA)
   // =========================================================================
   let message = '';
 
@@ -264,28 +272,22 @@ async function run() {
              + `🌐 Xem bảng lịch cập nhật: ${data.webAppUrl}`;
 
     await sendZaloMessage(message);
-    isDataChanged = true;
 
   } else {
-    // CHỐT KHÓA: Nếu hôm nay đã gửi tin nhắn trực nhật rồi thì dừng ngay
+    // Chốt khóa chống gửi lặp lại trong ngày
     if (ACTION_MODE === 'normal' && data.lastRunDate === todayStr) {
       console.log(`⛔ Hôm nay (${todayStr}) Bot đã gửi thông báo trực nhật lúc sáng rồi. Tự động chặn gửi lặp lại!`);
-      if (isDataChanged) {
-        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
-      }
       return;
     }
 
     // Kiểm tra Thứ Bảy, Chủ Nhật hoặc Ngày lễ
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       console.log(`Hôm nay là cuối tuần (${todayStr}), bỏ qua phần trực nhật.`);
-      if (isDataChanged) fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
       return;
     }
 
     if (isHoliday(today, data.holidays)) {
       console.log(`Hôm nay là ngày nghỉ lễ/nghỉ bù (${todayStr}), tự động bảo lưu lượt trực.`);
-      if (isDataChanged) fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
       return;
     }
 
@@ -316,20 +318,17 @@ async function run() {
 
     await sendZaloMessage(message);
     data.lastRunDate = todayStr;
-    isDataChanged = true;
   }
 
-  if (isDataChanged) {
-    data.chatId = CHAT_ID;
-    data.repo = GITHUB_REPO;
-    if (GH_TOKEN) {
-      data.ghKey = encodeSecret(GH_TOKEN);
-    }
-    data.updatedAt = Date.now();
-
-    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
-    console.log("✅ Đã lưu trạng thái vào data.json thành công!");
+  data.chatId = CHAT_ID;
+  data.repo = GITHUB_REPO;
+  if (GH_TOKEN) {
+    data.ghKey = encodeSecret(GH_TOKEN);
   }
+  data.updatedAt = Date.now();
+
+  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+  console.log("✅ Đã lưu trạng thái vào data.json thành công!");
 }
 
 run();
