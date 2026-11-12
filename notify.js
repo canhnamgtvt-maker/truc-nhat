@@ -203,13 +203,10 @@ async function run() {
   let isDataChanged = false;
 
   // =========================================================================
-  // PHẦN A: NHẮC ĐỊNH KỲ NGÀY 05 HÀNG THÁNG (CHỈ NHẮN ĐÚNG 1 LẦN TRONG THÁNG)
+  // PHẦN A: NHẮC ĐỊNH KỲ NGÀY 05 HÀNG THÁNG (CHỈ GỬI NỘI DUNG NGẮN GỌN)
   // =========================================================================
   if ((ACTION_MODE === 'normal' && dayOfMonth === 5 && data.lastPartyFeeMonth !== currentMonthKey) || ACTION_MODE === 'test_party_fee') {
-    const partyFeeMsg = `📌 [NHẮC VIỆC ĐỊNH KỲ THÁNG ${currentMonthKey}]\n`
-                      + `📅 Ngày: ${todayStr}\n`
-                      + `----------------------------------\n`
-                      + `💬 Nộp tiền Đảng phí chưa, hoàn thành ngay nhé`;
+    const partyFeeMsg = "Nộp tiền Đảng phí chưa, hoàn thành ngay nhé";
     await sendZaloMessage(partyFeeMsg);
     console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí định kỳ!");
 
@@ -227,7 +224,6 @@ async function run() {
   let message = '';
 
   if (ACTION_MODE === 'swap' && BUSY_PERSON && REPLACEMENT_PERSON) {
-    // Trường hợp có người bấm đổi ca trên Web App -> Cho phép gửi thông báo đổi ca
     const currentIdx = data.currentIndex % total;
 
     let queue = [];
@@ -271,7 +267,7 @@ async function run() {
     isDataChanged = true;
 
   } else {
-    // CHỐT KHÓA QUAN TRỌNG: Nếu hôm nay đã gửi tin nhắn trực nhật rồi thì DỪNG NGAY!
+    // CHỐT KHÓA: Nếu hôm nay đã gửi tin nhắn trực nhật rồi thì dừng ngay
     if (ACTION_MODE === 'normal' && data.lastRunDate === todayStr) {
       console.log(`⛔ Hôm nay (${todayStr}) Bot đã gửi thông báo trực nhật lúc sáng rồi. Tự động chặn gửi lặp lại!`);
       if (isDataChanged) {
