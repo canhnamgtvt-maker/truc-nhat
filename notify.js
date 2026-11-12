@@ -55,7 +55,6 @@ function getAutoHolidaysForYear(year) {
   if (holidayCache[year]) return holidayCache[year];
   const holidaySet = new Set();
 
-  // Thêm kỳ nghỉ và tự động cộng ngày nghỉ bù nếu rơi vào Thứ 7 (6) hoặc Chủ Nhật (0)
   function addHolidayPeriod(datesArray) {
     let weekendCount = 0;
     datesArray.forEach(d => {
@@ -81,7 +80,7 @@ function getAutoHolidaysForYear(year) {
   // 1. Tết Dương lịch (01/01) + Nghỉ bù
   addHolidayPeriod([new Date(year, 0, 1)]);
 
-  // 2. Dò lịch Âm tìm Tết Nguyên Đán và Giỗ Tổ Hùng Vương (10/3 ÂL)
+  // 2. Tết Nguyên Đán và Giỗ Tổ Hùng Vương (10/3 ÂL)
   let tetNewYearDate = null;
   let gioToDate = null;
   for (let m = 0; m <= 5; m++) {
@@ -98,7 +97,6 @@ function getAutoHolidaysForYear(year) {
     }
   }
 
-  // Tết Âm lịch: 05 ngày chính thức (từ ngày tất niên trước Mùng 1 đến hết Mùng 4 Tết) + Tự động nghỉ bù T7/CN
   if (tetNewYearDate) {
     const tetDays = [];
     for (let offset = -1; offset <= 3; offset++) {
@@ -109,15 +107,14 @@ function getAutoHolidaysForYear(year) {
     addHolidayPeriod(tetDays);
   }
 
-  // 3. Giỗ Tổ Hùng Vương (10/3 ÂL): 01 ngày + Tự động nghỉ bù
   if (gioToDate) {
     addHolidayPeriod([gioToDate]);
   }
 
-  // 4. Ngày 30/4 và 01/5: 02 ngày + Tự động nghỉ bù
+  // 3. Ngày 30/4 và 01/5 + Nghỉ bù
   addHolidayPeriod([new Date(year, 3, 30), new Date(year, 4, 1)]);
 
-  // 5. Quốc khánh 02/9: 02 ngày (02/9 và 01 ngày liền kề) + Tự động nghỉ bù
+  // 4. Quốc khánh 02/9 + Nghỉ bù
   const qkMain = new Date(year, 8, 2);
   const qkAdj = (qkMain.getDay() === 2) ? new Date(year, 8, 1) : new Date(year, 8, 3);
   const qkPeriod = [qkMain, qkAdj].sort((a, b) => a - b);
@@ -162,6 +159,23 @@ async function autoFetchChatId() {
   return '';
 }
 
+async function sendZaloMessage(text) {
+  try {
+    const sendUrl = `https://bot-api.zapps.me/bot${BOT_TOKEN}/sendMessage`;
+    const res = await fetch(sendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text: text
+      })
+    });
+    console.log("Kết quả gửi Zalo:", await res.text());
+  } catch (err) {
+    console.error("Lỗi gửi Zalo:", err);
+  }
+}
+
 async function run() {
   if (!BOT_TOKEN) {
     console.error("❌ LỖI: Chưa có ZALO_BOT_TOKEN trong mục Secrets!");
@@ -179,14 +193,41 @@ async function run() {
   }
 
   const today = getVNDate();
+  const dayOfMonth = today.getDate();
+  const monthOfYear = today.getMonth() + 1;
   const dayOfWeek = today.getDay();
   const todayStr = formatDateVN(today);
+  const currentMonthKey = `${monthOfYear}/${today.getFullYear()}`;
   const total = data.members.length;
 
+  let isDataChanged = false;
+
+  // =========================================================================
+  // PHẦN A: NHẮC ĐỊNH KỲ NGÀY 05 HÀNG THÁNG (CHỈ NHẮN ĐÚNG 1 LẦN TRONG THÁNG)
+  // =========================================================================
+  if ((ACTION_MODE === 'normal' && dayOfMonth === 5 && data.lastPartyFeeMonth !== currentMonthKey) || ACTION_MODE === 'test_party_fee') {
+    const partyFeeMsg = `📌 [NHẮC VIỆC ĐỊNH KỲ THÁNG ${currentMonthKey}]\n`
+                      + `📅 Ngày: ${todayStr}\n`
+                      + `----------------------------------\n`
+                      + `💬 Nộp tiền Đảng phí chưa, hoàn thành ngay nhé`;
+    await sendZaloMessage(partyFeeMsg);
+    console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí định kỳ!");
+
+    if (ACTION_MODE === 'normal') {
+      data.lastPartyFeeMonth = currentMonthKey;
+      isDataChanged = true;
+    } else if (ACTION_MODE === 'test_party_fee') {
+      return;
+    }
+  }
+
+  // =========================================================================
+  // PHẦN B: XỬ LÝ PHÂN CÔNG TRỰC NHẬT (CÓ KHÓA CHỐNG GỬI TRÙNG TRONG NGÀY)
+  // =========================================================================
   let message = '';
 
-  // TRƯỜNG HỢP 1: CÓ NGƯỜI BẤM ĐỔI CA TRÊN WEB APP
   if (ACTION_MODE === 'swap' && BUSY_PERSON && REPLACEMENT_PERSON) {
+    // Trường hợp có người bấm đổi ca trên Web App -> Cho phép gửi thông báo đổi ca
     const currentIdx = data.currentIndex % total;
 
     let queue = [];
@@ -226,19 +267,33 @@ async function run() {
              + `⏭️ Trực bù vào ngày làm việc kế tiếp: Đ/c ${nextPerson}\n`
              + `🌐 Xem bảng lịch cập nhật: ${data.webAppUrl}`;
 
+    await sendZaloMessage(message);
+    isDataChanged = true;
+
   } else {
-    // TRƯỜNG HỢP 2: CHẠY TỰ ĐỘNG MỖI SÁNG
+    // CHỐT KHÓA QUAN TRỌNG: Nếu hôm nay đã gửi tin nhắn trực nhật rồi thì DỪNG NGAY!
+    if (ACTION_MODE === 'normal' && data.lastRunDate === todayStr) {
+      console.log(`⛔ Hôm nay (${todayStr}) Bot đã gửi thông báo trực nhật lúc sáng rồi. Tự động chặn gửi lặp lại!`);
+      if (isDataChanged) {
+        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+      }
+      return;
+    }
+
+    // Kiểm tra Thứ Bảy, Chủ Nhật hoặc Ngày lễ
     if (dayOfWeek === 0 || dayOfWeek === 6) {
-      console.log(`Hôm nay là cuối tuần (${todayStr}), nghỉ trực.`);
+      console.log(`Hôm nay là cuối tuần (${todayStr}), bỏ qua phần trực nhật.`);
+      if (isDataChanged) fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
       return;
     }
 
-    // Kiểm tra ngày lễ tự động (Âm lịch + Dương lịch + Nghỉ bù của mọi năm)
     if (isHoliday(today, data.holidays)) {
-      console.log(`Hôm nay là ngày nghỉ lễ/nghỉ bù (${todayStr}), tự động bảo lưu lượt trực sang ngày đi làm kế tiếp.`);
+      console.log(`Hôm nay là ngày nghỉ lễ/nghỉ bù (${todayStr}), tự động bảo lưu lượt trực.`);
+      if (isDataChanged) fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
       return;
     }
 
+    // Bước sang ngày làm việc mới -> Nhảy sang người kế tiếp
     if (data.lastRunDate && data.lastRunDate !== todayStr) {
       data.currentIndex = (data.currentIndex + 1) % total;
       data.swappedInfo = null;
@@ -262,34 +317,23 @@ async function run() {
     message += `----------------------------------\n`
              + `⏭️ Dự kiến ngày làm việc kế tiếp: Đ/c ${nextPerson}\n`
              + `🔄 Nếu bận, bấm vào đây để chọn người trực thay:\n${data.webAppUrl}`;
+
+    await sendZaloMessage(message);
+    data.lastRunDate = todayStr;
+    isDataChanged = true;
   }
 
-  // Gửi tin nhắn vào Nhóm Zalo
-  try {
-    const sendUrl = `https://bot-api.zapps.me/bot${BOT_TOKEN}/sendMessage`;
-    const res = await fetch(sendUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: CHAT_ID,
-        text: message
-      })
-    });
-    console.log("Kết quả gửi Zalo:", await res.text());
-  } catch (err) {
-    console.error("Lỗi gửi Zalo:", err);
-  }
+  if (isDataChanged) {
+    data.chatId = CHAT_ID;
+    data.repo = GITHUB_REPO;
+    if (GH_TOKEN) {
+      data.ghKey = encodeSecret(GH_TOKEN);
+    }
+    data.updatedAt = Date.now();
 
-  data.chatId = CHAT_ID;
-  data.repo = GITHUB_REPO;
-  if (GH_TOKEN) {
-    data.ghKey = encodeSecret(GH_TOKEN);
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log("✅ Đã lưu trạng thái vào data.json thành công!");
   }
-  data.lastRunDate = todayStr;
-  data.updatedAt = Date.now();
-
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
-  console.log("✅ Đã lưu data.json thành công!");
 }
 
 run();
