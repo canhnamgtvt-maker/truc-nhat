@@ -129,6 +129,7 @@
 
   <script>
     let appData = null;
+    const holidayCache = {};
 
     function formatDateVN(d) {
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
@@ -138,11 +139,108 @@
       return ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"][d.getDay()];
     }
 
-    function isWorkDay(d, holidays) {
+    // ================= BỘ TỰ ĐỘNG TÍNH LỄ ÂM - DƯƠNG & NGHỈ BÙ CHO MỌI NĂM =================
+    function getLunarInfo(date) {
+      try {
+        const fmt = new Intl.DateTimeFormat('en-u-ca-chinese', { month: 'numeric', day: 'numeric' });
+        const parts = fmt.formatToParts(date);
+        const mVal = parts.find(p => p.type === 'month')?.value || '1';
+        const dVal = parts.find(p => p.type === 'day')?.value || '1';
+        return {
+          month: parseInt(mVal, 10),
+          isLeap: isNaN(Number(mVal)),
+          day: parseInt(dVal, 10)
+        };
+      } catch (e) {
+        return { month: 0, isLeap: false, day: 0 };
+      }
+    }
+
+    function getAutoHolidaysForYear(year) {
+      if (holidayCache[year]) return holidayCache[year];
+      const holidaySet = new Set();
+
+      function addHolidayPeriod(datesArray) {
+        let weekendCount = 0;
+        datesArray.forEach(d => {
+          holidaySet.add(formatDateVN(d));
+          const dow = d.getDay();
+          if (dow === 0 || dow === 6) weekendCount++;
+        });
+
+        if (weekendCount > 0) {
+          let cursor = new Date(datesArray[datesArray.length - 1]);
+          while (weekendCount > 0) {
+            cursor.setDate(cursor.getDate() + 1);
+            const dow = cursor.getDay();
+            const dStr = formatDateVN(cursor);
+            if (dow !== 0 && dow !== 6 && !holidaySet.has(dStr)) {
+              holidaySet.add(dStr);
+              weekendCount--;
+            }
+          }
+        }
+      }
+
+      // 1. Tết Dương lịch (01/01)
+      addHolidayPeriod([new Date(year, 0, 1)]);
+
+      // 2. Tết Âm lịch & Giỗ Tổ Hùng Vương (10/3 ÂL)
+      let tetNewYearDate = null;
+      let gioToDate = null;
+      for (let m = 0; m <= 5; m++) {
+        for (let d = 1; d <= 31; d++) {
+          const cur = new Date(year, m, d);
+          if (cur.getMonth() !== m) continue;
+          const lunar = getLunarInfo(cur);
+          if (lunar.month === 1 && !lunar.isLeap && lunar.day === 1 && !tetNewYearDate) {
+            tetNewYearDate = cur;
+          }
+          if (lunar.month === 3 && !lunar.isLeap && lunar.day === 10 && !gioToDate) {
+            gioToDate = cur;
+          }
+        }
+      }
+
+      if (tetNewYearDate) {
+        const tetDays = [];
+        for (let offset = -1; offset <= 3; offset++) {
+          const td = new Date(tetNewYearDate);
+          td.setDate(td.getDate() + offset);
+          tetDays.push(td);
+        }
+        addHolidayPeriod(tetDays);
+      }
+
+      if (gioToDate) {
+        addHolidayPeriod([gioToDate]);
+      }
+
+      // 3. Ngày Chiến thắng 30/4 & Quốc tế Lao động 01/5
+      addHolidayPeriod([new Date(year, 3, 30), new Date(year, 4, 1)]);
+
+      // 4. Quốc khánh 02/9 (02 ngày)
+      const qkMain = new Date(year, 8, 2);
+      const qkAdj = (qkMain.getDay() === 2) ? new Date(year, 8, 1) : new Date(year, 8, 3);
+      const qkPeriod = [qkMain, qkAdj].sort((a, b) => a - b);
+      addHolidayPeriod(qkPeriod);
+
+      holidayCache[year] = holidaySet;
+      return holidaySet;
+    }
+
+    function isHolidayDate(d, manualHolidays) {
+      const dStr = formatDateVN(d);
+      if (Array.isArray(manualHolidays) && manualHolidays.includes(dStr)) return true;
+      return getAutoHolidaysForYear(d.getFullYear()).has(dStr);
+    }
+
+    function isWorkDay(d, manualHolidays) {
       const day = d.getDay();
       if (day === 0 || day === 6) return false;
-      return !(holidays || []).includes(formatDateVN(d));
+      return !isHolidayDate(d, manualHolidays);
     }
+    // ======================================================================================
 
     function decodeSecret(encoded) {
       if (!encoded) return '';
@@ -163,7 +261,6 @@
         return;
       }
 
-      // Đọc trực tiếp dữ liệu thời gian thực từ GitHub API nếu có khóa kết nối
       if (appData.ghKey) {
         const token = decodeSecret(appData.ghKey);
         const repo = appData.repo || 'canhnamgtvt-maker/truc-nhat';
@@ -214,13 +311,13 @@
         let d = new Date(monday);
         d.setDate(monday.getDate() + i);
         let dStr = formatDateVN(d);
-        let holiday = (appData.holidays || []).includes(dStr);
+        let holiday = isHolidayDate(d, appData.holidays);
 
         let status = "upcoming";
         if (d < todayZero) status = "completed";
         else if (d.getTime() === todayZero.getTime()) status = "today";
 
-        let person = holiday ? "Nghỉ lễ" : appData.members[runIdx % total];
+        let person = holiday ? "Nghỉ lễ / Nghỉ bù" : appData.members[runIdx % total];
         if (!holiday) runIdx++;
 
         weekList.push({
@@ -397,7 +494,6 @@
       closeModal();
       document.getElementById("loadingOverlay").classList.remove("hidden");
 
-      // Gửi lệnh trực tiếp lên máy chủ GitHub Actions để Bot nhắn tin vào nhóm Zalo
       const token = decodeSecret(appData.ghKey);
       const repo = appData.repo || 'canhnamgtvt-maker/truc-nhat';
       let triggered = false;
@@ -426,7 +522,6 @@
         console.error(e);
       }
 
-      // Cập nhật ngay trên màn hình điện thoại
       let queue = [];
       for (let i = 0; i < total; i++) {
         queue.push(appData.members[(todayIdx + i) % total]);
