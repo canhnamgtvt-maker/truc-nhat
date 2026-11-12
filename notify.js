@@ -202,7 +202,6 @@ async function run() {
   const currentMonthKey = `${monthOfYear}/${today.getFullYear()}`;
   const total = data.members.length;
 
-  // Nhận diện khung giờ 9h00 sáng ngày 05 hàng tháng (tách biệt với khung 6h45 sáng)
   const isPartyFeeSchedule = (SCHEDULE_CRON === '0 2 5 * *') || (dayOfMonth === 5 && currentHour >= 8);
 
   // =========================================================================
@@ -214,16 +213,28 @@ async function run() {
       return;
     }
 
-    const partyFeeMsg = "Nộp tiền Đảng phí chưa, hoàn thành ngay nhé";
+    // Danh sách các câu nhắc nộp Đảng phí vui vẻ, tự nhiên
+    const danhSachCauNhac = [
+      "Có lương rồi à, đóng Đảng phí luôn đi!",
+      "Nộp Đảng phí đi không quên mất đấy!",
+      "Nộp tiền Đảng phí chưa, hoàn thành ngay nhé!",
+      "Ting ting! Đầu tháng rủng rỉnh, đóng Đảng phí luôn thôi các đồng chí ơi!",
+      "Tranh thủ lúc ví còn dày, hoàn thành ngay Đảng phí tháng này nhé!",
+      "Alo alo, đến hẹn lại lên, nộp Đảng phí thôi anh chị em ơi!",
+      "Góc nhắc nhẹ: Các đồng chí đã đóng Đảng phí tháng này chưa nhỉ?",
+      "Lương đã về bản, mời các đồng chí hoàn thành nghĩa vụ Đảng phí nhé!"
+    ];
+
+    const partyFeeMsg = danhSachCauNhac[Math.floor(Math.random() * danhSachCauNhac.length)];
     await sendZaloMessage(partyFeeMsg);
-    console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí lúc 9h sáng!");
+    console.log("✅ Đã gửi tin nhắn nhắc nộp Đảng phí:", partyFeeMsg);
 
     if (ACTION_MODE === 'normal') {
       data.lastPartyFeeMonth = currentMonthKey;
       data.updatedAt = Date.now();
       fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
     }
-    return; // Dừng ngay sau khi nhắn Đảng phí, không chạy xuống phần trực nhật
+    return;
   }
 
   // =========================================================================
