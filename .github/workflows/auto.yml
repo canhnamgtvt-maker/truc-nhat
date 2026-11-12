@@ -2,9 +2,22 @@ name: Tự động nhắc trực nhật Zalo
 
 on:
   schedule:
-    # Chạy lúc 23:45 UTC (tức 06:45 sáng giờ Việt Nam) từ Thứ Hai đến Thứ Sáu
+    # Chạy tự động lúc 06:45 sáng (giờ VN) từ Thứ Hai đến Thứ Sáu
     - cron: '45 23 * * 0-4'
-  workflow_dispatch: # Cho phép bấm nút chạy thử bằng tay bất kỳ lúc nào
+  workflow_dispatch:
+    inputs:
+      action_mode:
+        description: 'Chế độ chạy (normal / swap)'
+        required: false
+        default: 'normal'
+      busy_person:
+        description: 'Người báo bận'
+        required: false
+        default: ''
+      replacement_person:
+        description: 'Người trực thay'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -16,7 +29,7 @@ jobs:
       - name: Tải dữ liệu
         uses: actions/checkout@v4
 
-      - name: Cài đặt môi trường chạy
+      - name: Cài đặt Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -25,11 +38,16 @@ jobs:
         env:
           ZALO_BOT_TOKEN: ${{ secrets.ZALO_BOT_TOKEN }}
           ZALO_CHAT_ID: ${{ secrets.ZALO_CHAT_ID }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          ACTION_MODE: ${{ github.event.inputs.action_mode || 'normal' }}
+          BUSY_PERSON: ${{ github.event.inputs.busy_person || '' }}
+          REPLACEMENT_PERSON: ${{ github.event.inputs.replacement_person || '' }}
         run: node notify.js
 
-      - name: Lưu lượt trực mới cho ngày mai
+      - name: Lưu lịch trực mới vào data.json
         run: |
           git config --global user.name "Auto Duty Bot"
           git config --global user.email "actions@github.com"
           git add data.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Chuyển ca trực sang ngày kế tiếp" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Cập nhật lịch trực nhật" && git pull --rebase origin main && git push)
