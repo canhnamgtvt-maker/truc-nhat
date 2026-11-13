@@ -78,10 +78,8 @@ function getAutoHolidaysForYear(year) {
     }
   }
 
-  // 1. Tết Dương lịch (01/01) + Nghỉ bù
   addHolidayPeriod([new Date(year, 0, 1)]);
 
-  // 2. Tết Nguyên Đán và Giỗ Tổ Hùng Vương (10/3 ÂL)
   let tetNewYearDate = null;
   let gioToDate = null;
   for (let m = 0; m <= 5; m++) {
@@ -112,10 +110,8 @@ function getAutoHolidaysForYear(year) {
     addHolidayPeriod([gioToDate]);
   }
 
-  // 3. Ngày 30/4 và 01/5 + Nghỉ bù
   addHolidayPeriod([new Date(year, 3, 30), new Date(year, 4, 1)]);
 
-  // 4. Quốc khánh 02/9 + Nghỉ bù
   const qkMain = new Date(year, 8, 2);
   const qkAdj = (qkMain.getDay() === 2) ? new Date(year, 8, 1) : new Date(year, 8, 3);
   const qkPeriod = [qkMain, qkAdj].sort((a, b) => a - b);
@@ -202,18 +198,15 @@ async function run() {
   const currentMonthKey = `${monthOfYear}/${today.getFullYear()}`;
   const total = data.members.length;
 
-  const isPartyFeeSchedule = (SCHEDULE_CRON === '0 2 5 * *') || (dayOfMonth === 5 && currentHour >= 8);
+  let isDataChanged = false;
+
+  // Nhận diện khung giờ nhắc Đảng phí (từ 8h30 sáng ngày 05 hàng tháng trở đi)
+  const isPartyFeeTime = (SCHEDULE_CRON === '53 1 5 * *') || (SCHEDULE_CRON === '7 2 5 * *') || (dayOfMonth === 5 && currentHour >= 8);
 
   // =========================================================================
-  // LUỒNG 1: KHUNG GIỜ RIÊNG NHẮC NỘP ĐẢNG PHÍ (09h00 SÁNG NGÀY 05 HÀNG THÁNG)
+  // LUỒNG 1: NHẮC NỘP ĐẢNG PHÍ (KHOẢNG 09h00 SÁNG NGÀY 05 HÀNG THÁNG)
   // =========================================================================
-  if ((ACTION_MODE === 'normal' && isPartyFeeSchedule) || ACTION_MODE === 'test_party_fee') {
-    if (ACTION_MODE === 'normal' && data.lastPartyFeeMonth === currentMonthKey) {
-      console.log(`⛔ Tháng ${currentMonthKey} đã nhắc nộp Đảng phí rồi. Bỏ qua!`);
-      return;
-    }
-
-    // Danh sách các câu nhắc nộp Đảng phí vui vẻ, tự nhiên
+  if ((ACTION_MODE === 'normal' && isPartyFeeTime && data.lastPartyFeeMonth !== currentMonthKey) || ACTION_MODE === 'test_party_fee') {
     const danhSachCauNhac = [
       "Có lương rồi à, đóng Đảng phí luôn đi!",
       "Nộp Đảng phí đi không quên mất đấy!",
@@ -231,14 +224,14 @@ async function run() {
 
     if (ACTION_MODE === 'normal') {
       data.lastPartyFeeMonth = currentMonthKey;
-      data.updatedAt = Date.now();
-      fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+      isDataChanged = true;
+    } else if (ACTION_MODE === 'test_party_fee') {
+      return;
     }
-    return;
   }
 
   // =========================================================================
-  // LUỒNG 2: PHÂN CÔNG TRỰC NHẬT (06h45 SÁNG HÀNG NGÀY HOẶC KHI BẤM ĐỔI CA)
+  // LUỒNG 2: PHÂN CÔNG TRỰC NHẬT (SÁNG HÀNG NGÀY HOẶC KHI BẤM ĐỔI CA)
   // =========================================================================
   let message = '';
 
@@ -283,22 +276,35 @@ async function run() {
              + `🌐 Xem bảng lịch cập nhật: ${data.webAppUrl}`;
 
     await sendZaloMessage(message);
+    isDataChanged = true;
 
   } else {
-    // Chốt khóa chống gửi lặp lại trong ngày
+    // Chốt khóa: Nếu hôm nay đã gửi thông báo trực nhật rồi thì dừng ngay
     if (ACTION_MODE === 'normal' && data.lastRunDate === todayStr) {
       console.log(`⛔ Hôm nay (${todayStr}) Bot đã gửi thông báo trực nhật lúc sáng rồi. Tự động chặn gửi lặp lại!`);
+      if (isDataChanged) {
+        data.updatedAt = Date.now();
+        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+      }
       return;
     }
 
     // Kiểm tra Thứ Bảy, Chủ Nhật hoặc Ngày lễ
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       console.log(`Hôm nay là cuối tuần (${todayStr}), bỏ qua phần trực nhật.`);
+      if (isDataChanged) {
+        data.updatedAt = Date.now();
+        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+      }
       return;
     }
 
     if (isHoliday(today, data.holidays)) {
       console.log(`Hôm nay là ngày nghỉ lễ/nghỉ bù (${todayStr}), tự động bảo lưu lượt trực.`);
+      if (isDataChanged) {
+        data.updatedAt = Date.now();
+        fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+      }
       return;
     }
 
@@ -329,17 +335,20 @@ async function run() {
 
     await sendZaloMessage(message);
     data.lastRunDate = todayStr;
+    isDataChanged = true;
   }
 
-  data.chatId = CHAT_ID;
-  data.repo = GITHUB_REPO;
-  if (GH_TOKEN) {
-    data.ghKey = encodeSecret(GH_TOKEN);
-  }
-  data.updatedAt = Date.now();
+  if (isDataChanged) {
+    data.chatId = CHAT_ID;
+    data.repo = GITHUB_REPO;
+    if (GH_TOKEN) {
+      data.ghKey = encodeSecret(GH_TOKEN);
+    }
+    data.updatedAt = Date.now();
 
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
-  console.log("✅ Đã lưu trạng thái vào data.json thành công!");
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf8');
+    console.log("✅ Đã lưu trạng thái vào data.json thành công!");
+  }
 }
 
 run();
