@@ -1,8 +1,8 @@
 {
   "roomName": "Phòng Xây dựng và Tài nguyên Môi trường",
   "webAppUrl": "https://canhnamgtvt-maker.github.io/truc-nhat/",
-  "currentIndex": 0,
-  "lastRunDate": "12/11/2026",
+  "currentIndex": 1,
+  "lastRunDate": "13/11/2026",
   "members": [
     "Nguyễn Vy Đồng",
     "Nguyễn Ngọc Quyết",
@@ -20,12 +20,8 @@
   ],
   "chatId": "zgr-643710f6a3924acc1383",
   "botKey": "MjYzNzExMjEyNjI0NjQ5MzI0ODpRa0ZTUVpZcnhkQVJDbXRuY2Z3UmhSdHplVG56U0NBemlob3lvSWNJQUJXYnhaS053Ym1TWGhYWExHZEdWbFl4",
-  "updatedAt": 1794457264982,
+  "updatedAt": 1794541012585,
   "repo": "canhnamgtvt-maker/truc-nhat",
   "ghKey": "WmU7Wjo2VnJlcGg7Wk5QSHk0WWx2ZjhPbXBFU1I6RUR3XGhFYXJqaQ==",
-  "swappedInfo": {
-    "dateStr": "12/11/2026",
-    "busyPerson": "Nguyễn Ngọc Quyết",
-    "replacementPerson": "Nguyễn Vy Đồng"
-  }
+  "swappedInfo": null
 }
