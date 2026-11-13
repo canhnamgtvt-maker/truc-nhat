@@ -16,6 +16,9 @@ const REPLACEMENT_PERSON = (process.env.REPLACEMENT_PERSON || '').trim();
 
 let CHAT_ID = (process.env.ZALO_CHAT_ID || data.chatId || '').trim();
 
+// NGÀY BẮT ĐẦU CHẠY CHÍNH THỨC
+const OFFICIAL_START_DATE = data.startDate || '01/12/2026';
+
 function getVNDate() {
   const now = new Date();
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -27,6 +30,13 @@ function formatDateVN(date) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const y = date.getFullYear();
   return `${d}/${m}/${y}`;
+}
+
+function parseDateVN(str) {
+  if (!str) return null;
+  const parts = str.split('/');
+  if (parts.length !== 3) return null;
+  return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
 }
 
 function getDayNameVN(dayIndex) {
@@ -190,6 +200,7 @@ async function run() {
   }
 
   const today = getVNDate();
+  const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const currentHour = today.getHours();
   const dayOfMonth = today.getDate();
   const monthOfYear = today.getMonth() + 1;
@@ -198,9 +209,16 @@ async function run() {
   const currentMonthKey = `${monthOfYear}/${today.getFullYear()}`;
   const total = data.members.length;
 
+  // KIỂM TRA NGÀY BẮT ĐẦU CHÍNH THỨC (01/12/2026)
+  const startDateObj = parseDateVN(OFFICIAL_START_DATE);
+  if (ACTION_MODE === 'normal' && startDateObj && todayZero < startDateObj) {
+    console.log(`⏳ Hệ thống được hẹn bắt đầu từ ngày ${OFFICIAL_START_DATE}. Hôm nay là ${todayStr}, Bot tạm nghỉ!`);
+    return;
+  }
+
   let isDataChanged = false;
 
-  // Nhận diện khung giờ nhắc Đảng phí (từ 8h30 sáng ngày 05 hàng tháng trở đi)
+  // Nhận diện khung giờ nhắc Đảng phí (từ 8h00 sáng ngày 05 hàng tháng trở đi)
   const isPartyFeeTime = (SCHEDULE_CRON === '53 1 5 * *') || (SCHEDULE_CRON === '7 2 5 * *') || (dayOfMonth === 5 && currentHour >= 8);
 
   // =========================================================================
@@ -308,8 +326,13 @@ async function run() {
       return;
     }
 
-    // Bước sang ngày làm việc mới -> Nhảy sang người kế tiếp
-    if (data.lastRunDate && data.lastRunDate !== todayStr) {
+    // Xử lý nhảy lượt trực:
+    // Nếu lần chạy trước đó là bản chạy thử trước ngày 01/12/2026 -> Đặt lại về người đầu tiên (currentIndex = 0)
+    const lastRunObj = parseDateVN(data.lastRunDate);
+    if (!lastRunObj || (startDateObj && lastRunObj < startDateObj)) {
+      data.currentIndex = 0;
+      data.swappedInfo = null;
+    } else if (data.lastRunDate !== todayStr) {
       data.currentIndex = (data.currentIndex + 1) % total;
       data.swappedInfo = null;
     }
