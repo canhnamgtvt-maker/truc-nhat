@@ -2,10 +2,14 @@ name: Tự động nhắc trực nhật & Định kỳ Zalo
 
 on:
   schedule:
-    # 1. Khung giờ Trực nhật: 23:45 UTC = 06:45 sáng giờ Việt Nam
-    - cron: '45 23 * * *'
-    # 2. Khung giờ Đảng phí: 02:00 UTC ngày 05 = 09:00 sáng ngày 05 hàng tháng giờ Việt Nam
-    - cron: '0 2 5 * *'
+    # 1. Khung giờ Trực nhật (Đặt 3 nhịp phút lẻ để né nghẽn mạng lúc nửa đêm UTC):
+    # Nhịp 1: 23:27 UTC (06:27 sáng VN) | Nhịp 2: 23:36 UTC (06:36 sáng VN) | Nhịp 3: 23:46 UTC (06:46 sáng VN)
+    - cron: '27,36,46 23 * * *'
+    # Nhịp bọc lót sớm: 00:07 UTC (07:07 sáng VN) phòng khi cả giờ 23h UTC bị GitHub bảo trì
+    - cron: '7 0 * * *'
+    # 2. Khung giờ Đảng phí: 01:53 UTC và 02:07 UTC ngày 05 (Khoảng 08:53 - 09:07 sáng ngày 05 hàng tháng)
+    - cron: '53 1 5 * *'
+    - cron: '7 2 5 * *'
   workflow_dispatch:
     inputs:
       action_mode:
